@@ -6,3 +6,11 @@
     color: #ff5555;
     font-weight: bold;
 }
+.stt-processing-icon {
+    color: #3399ff;
+}
+.stt-processing-label {
+    margin-right: 6px;
+    color: #3399ff;
+    font-weight: bold;
+}

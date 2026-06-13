@@ -10,149 +10,294 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
+function findFreePort(startPort) {
+    let port = startPort;
+    while (port < 65535) {
+        try {
+            let listener = new Gio.SocketListener();
+            let address = Gio.InetSocketAddress.new_from_string('127.0.0.1', port);
+            listener.add_address(address, Gio.SocketType.STREAM, Gio.SocketProtocol.TCP, null, null);
+            listener.close();
+            return port;
+        } catch (e) {
+            port++;
+        }
+    }
+    return startPort;
+}
 
 class Indicator {
-    
     constructor(ext) {
-        this.ext = ext
-        this.visible = false
+        this.ext = ext;
+        this.visible = false;
         this.timerId = null;
-        this.proc = null;
+        this.pipeline = null;
+        this.state = 'idle';
+        this._cancellable = null;
     }
 
     show() {
-        this.visible = true
+        this.visible = true;
+        this.state = 'recording';
         this.ext._indicator = new PanelMenu.Button(0.0, this.ext.metadata.name, false);
 
-        // Создаем контейнер, чтобы положить в него и таймер, и иконку
         this.box = new St.BoxLayout({ style_class: 'panel-status-indicators-box' });
 
-        // Таймер (пока с пустым текстом)
         this.timerLabel = new St.Label({
             text: '00:00',
-            y_align: Clutter.ActorAlign.CENTER // Центрируем по вертикали
+            y_align: Clutter.ActorAlign.CENTER
         });
 
-        // Иконка микрофона
         this.icon = new St.Icon({
             icon_name: 'audio-input-microphone-symbolic',
             style_class: 'system-status-icon',
         });
 
-        // Собираем всё вместе
         this.box.add_child(this.timerLabel);
         this.box.add_child(this.icon);
         this.ext._indicator.add_child(this.box);
 
-        // Обрабатываем нажатие на саму кнопку индикатора (останавливаем всё)
         this.ext._indicator.connect('button-press-event', () => {
-            this.hide();
+            if (this.state === 'recording') {
+                this.stopAndProcess();
+            } else if (this.state === 'processing') {
+                this.cancelAndHide();
+            }
         });
 
-        // Add the indicator to the panel
         Main.panel.addToStatusArea(this.ext.uuid, this.ext._indicator);
 
-        // Сразу запускаем запись и таймер
         this.startRecording();
     }
 
     hide() {
         this.stopRecording();
-        this.visible = false
+        if (this._cancellable) {
+            this._cancellable.cancel();
+            this._cancellable = null;
+        }
+        this.state = 'idle';
+        this.visible = false;
         this.ext._indicator?.destroy();
         this.ext._indicator = null;
     }
 
     startRecording() {
-        // 1. Делаем красный цвет для иконки и таймера
         this.icon.add_style_class_name('stt-recording-icon');
         this.timerLabel.add_style_class_name('stt-timer-label');
 
-        // 2. Запускаем таймер
         this.startTime = GLib.get_monotonic_time();
-        this.updateTimer(); // Первый вызов сразу, чтобы не ждать секунду
+        this.updateTimer();
         this.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
             this.updateTimer();
             return GLib.SOURCE_CONTINUE;
         });
 
-        // 3. Запускаем нативный GStreamer для записи в файл
         let savePath = this.ext.settings.get_string('save-path');
-        // Если путь начинается со слеша - значит он абсолютный, берем как есть. 
-        // Иначе - подставляем домашнюю папку пользователя
         let filePath = savePath.startsWith('/') ? savePath : GLib.get_home_dir() + '/' + savePath;
         
         try {
             Gst.init(null);
-            // Создаем пайплайн: захват микрофона -> конвертация -> упаковка в WAV -> запись в файл
             let pipelineStr = `autoaudiosrc ! audioconvert ! wavenc ! filesink location=${filePath}`;
             this.pipeline = Gst.parse_launch(pipelineStr);
             this.pipeline.set_state(Gst.State.PLAYING);
-            console.log("Запись началась через GStreamer в файл: " + filePath);
         } catch (e) {
-            console.error("Ошибка запуска GStreamer: ", e);
+            console.error("STT2Clipboard: Error starting GStreamer: ", e);
         }
     }
 
     updateTimer() {
-        // Считаем разницу во времени
         let now = GLib.get_monotonic_time();
-        let diffSeconds = Math.floor((now - this.startTime) / 1000000); // Переводим микросекунды в секунды
-
-        // Форматируем минуты и секунды с нулями впереди (MM:SS)
+        let diffSeconds = Math.floor((now - this.startTime) / 1000000);
         let mins = Math.floor(diffSeconds / 60).toString().padStart(2, '0');
         let secs = (diffSeconds % 60).toString().padStart(2, '0');
-        
         this.timerLabel.set_text(`${mins}:${secs}`);
     }
 
     stopRecording() {
-        // 1. Убиваем таймер
         if (this.timerId) {
             GLib.source_remove(this.timerId);
             this.timerId = null;
         }
 
-        // 2. Останавливаем процесс записи GStreamer
         if (this.pipeline) {
-            // Посылаем End Of Stream (EOS), чтобы файл WAV корректно закрылся (записались заголовки с длиной)
             this.pipeline.send_event(Gst.Event.new_eos());
-            
-            // Даем полсекунды на то, чтобы GStreamer успел сбросить буфер на диск и закрыть файл, затем гасим пайплайн
+            let pipelineToClose = this.pipeline;
+            this.pipeline = null;
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-                if (this.pipeline) {
-                    this.pipeline.set_state(Gst.State.NULL);
-                    this.pipeline = null;
+                if (pipelineToClose) {
+                    try {
+                        pipelineToClose.set_state(Gst.State.NULL);
+                    } catch (e) {
+                        console.error("STT2Clipboard: Error setting pipeline state to NULL: ", e);
+                    }
                 }
                 return GLib.SOURCE_REMOVE;
             });
-            console.log("Запись остановлена (GStreamer)");
         }
     }
-}
 
+    async stopAndProcess() {
+        if (this.state !== 'recording') return;
+        this.state = 'processing';
+
+        if (this.timerId) {
+            GLib.source_remove(this.timerId);
+            this.timerId = null;
+        }
+
+        let savePath = this.ext.settings.get_string('save-path');
+        let filePath = savePath.startsWith('/') ? savePath : GLib.get_home_dir() + '/' + savePath;
+
+        if (this.pipeline) {
+            this.pipeline.send_event(Gst.Event.new_eos());
+            let pipelineToClose = this.pipeline;
+            this.pipeline = null;
+            
+            await new Promise(resolve => {
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                    if (pipelineToClose) {
+                        try {
+                            pipelineToClose.set_state(Gst.State.NULL);
+                        } catch (e) {
+                            console.error("STT2Clipboard: Error setting pipeline state to NULL: ", e);
+                        }
+                    }
+                    resolve();
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
+        }
+
+        if (this.state !== 'processing') return;
+
+        this.icon.icon_name = 'process-working-symbolic';
+        this.icon.remove_style_class_name('stt-recording-icon');
+        this.icon.add_style_class_name('stt-processing-icon');
+
+        this.timerLabel.set_text('Распознавание...');
+        this.timerLabel.remove_style_class_name('stt-timer-label');
+        this.timerLabel.add_style_class_name('stt-processing-label');
+
+        this._cancellable = new Gio.Cancellable();
+
+        try {
+            let language = this.ext.settings.get_string('whisper-language');
+            let port = this.ext.activeWhisperPort;
+
+            let argv = [
+                'curl', '-s',
+                '-X', 'POST',
+                `http://127.0.0.1:${port}/inference`,
+                '-H', 'Content-Type: multipart/form-data',
+                '-F', `file=@${filePath}`,
+                '-F', 'temperature=0.0',
+                '-F', 'response_format=json'
+            ];
+            if (language && language !== 'auto') {
+                argv.push('-F', `language=${language}`);
+            }
+
+            let proc = new Gio.Subprocess({
+                argv: argv,
+                flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+            });
+            proc.init(this._cancellable);
+
+            let [stdout, stderr] = await proc.communicate_utf8_async(null, this._cancellable);
+            let status = proc.get_exit_status();
+
+            if (status !== 0) {
+                throw new Error(stderr ? stderr.trim() : `curl exited with status ${status}`);
+            }
+
+            let response = JSON.parse(stdout);
+            let text = response.text ? response.text.trim() : '';
+
+            if (text) {
+                St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
+                if (this.ext.settings.get_boolean('show-notification')) {
+                    Main.notify('STT2Clipboard', `Текст скопирован: "${text}"`);
+                }
+            } else {
+                if (this.ext.settings.get_boolean('show-notification')) {
+                    Main.notify('STT2Clipboard', 'Речь не распознана.');
+                }
+            }
+        } catch (e) {
+            console.error("STT2Clipboard: Error during STT: ", e);
+            if (this.ext.settings.get_boolean('show-notification')) {
+                Main.notify('STT2Clipboard', `Ошибка распознавания: ${e.message}`);
+            }
+        } finally {
+            this._cancellable = null;
+            this.hide();
+        }
+    }
+
+    cancelAndHide() {
+        if (this._cancellable) {
+            this._cancellable.cancel();
+            this._cancellable = null;
+        }
+        this.hide();
+    }
+}
 
 export default class ExampleExtension extends Extension {
     enable() {
         this.indicatorObj = new Indicator(this);
-        // this.indicatorObj.show(); // Можно убрать автопоказ при старте, если хотим показывать только по F9
-
-        // 1. Получаем настройки нашего расширения
         this.settings = this.getSettings('org.gnome.shell.extensions.stt2clipboard');
 
-        // 2. Добавляем биндинг клавиши (у нас в схеме прописана F9)
+        let startPort = this.settings.get_int('whisper-port');
+        if (this.settings.get_boolean('whisper-autostart')) {
+            let port = findFreePort(startPort);
+            this.activeWhisperPort = port;
+
+            let binPath = this.settings.get_string('whisper-server-bin');
+            let modelPath = this.settings.get_string('whisper-model-path');
+            let threads = this.settings.get_int('whisper-threads');
+            let language = this.settings.get_string('whisper-language');
+
+            let argv = [
+                binPath,
+                '-m', modelPath,
+                '--port', port.toString(),
+                '--host', '127.0.0.1',
+                '-t', threads.toString()
+            ];
+            if (language && language !== 'auto') {
+                argv.push('-l', language);
+            }
+
+            try {
+                this._whisperProc = new Gio.Subprocess({
+                    argv: argv,
+                    flags: Gio.SubprocessFlags.NONE
+                });
+                this._whisperProc.init(null);
+                console.log(`STT2Clipboard: Started whisper-server on port ${port}`);
+            } catch (e) {
+                console.error(`STT2Clipboard: Failed to start whisper-server: ${e.message}`);
+                Main.notify('STT2Clipboard', `Ошибка запуска сервера: ${e.message}`);
+            }
+        } else {
+            this.activeWhisperPort = startPort;
+            this._whisperProc = null;
+        }
+
         Main.wm.addKeybinding(
-            'shortcut-key', // имя ключа в файле настроек
+            'shortcut-key',
             this.settings,
             Meta.KeyBindingFlags.NONE,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
             () => {
-                // Это тот самый handler (функция), который срабатывает при нажатии F9.
-                // Давай сделаем так: если микрофон не виден - показываем, если виден - прячем.
-                if (!this.indicatorObj.visible) {
+                if (this.indicatorObj.state === 'idle') {
                     this.indicatorObj.show();
-                } else {
-                    this.indicatorObj.hide();
+                } else if (this.indicatorObj.state === 'recording') {
+                    this.indicatorObj.stopAndProcess();
+                } else if (this.indicatorObj.state === 'processing') {
+                    this.indicatorObj.cancelAndHide();
                 }
             }
         );
@@ -164,9 +309,17 @@ export default class ExampleExtension extends Extension {
             this.indicatorObj = null;
         }
 
-        // Обязательно удаляем биндинг при отключении расширения!
         Main.wm.removeKeybinding('shortcut-key');
-        
+
+        if (this._whisperProc) {
+            try {
+                this._whisperProc.force_exit();
+            } catch (e) {
+                console.error(`STT2Clipboard: Error stopping whisper-server: ${e.message}`);
+            }
+            this._whisperProc = null;
+        }
+
         this.settings = null;
     }
 }

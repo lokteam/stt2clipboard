@@ -11,5 +11,40 @@
       <summary>Record save path</summary>
       <description>Path where the record will be saved (relative to home or absolute)</description>
     </key>
+    <key name="whisper-server-bin" type="s">
+      <default>'/usr/bin/whisper-server'</default>
+      <summary>Whisper server binary path</summary>
+      <description>Path to the whisper-server binary</description>
+    </key>
+    <key name="whisper-model-path" type="s">
+      <default>'/usr/share/whisper-models/ggml-large-v3-turbo-q5_0.bin'</default>
+      <summary>Whisper model path</summary>
+      <description>Path to the GGML model for whisper-server</description>
+    </key>
+    <key name="whisper-port" type="i">
+      <default>9123</default>
+      <summary>Whisper server port</summary>
+      <description>Port number for the whisper-server</description>
+    </key>
+    <key name="whisper-language" type="s">
+      <default>'ru'</default>
+      <summary>Whisper spoken language</summary>
+      <description>Language spoken in the recording ('auto' for auto-detect)</description>
+    </key>
+    <key name="whisper-autostart" type="b">
+      <default>true</default>
+      <summary>Autostart whisper server</summary>
+      <description>Whether to start/stop the whisper-server with the extension lifecycle</description>
+    </key>
+    <key name="whisper-threads" type="i">
+      <default>4</default>
+      <summary>Whisper server CPU threads</summary>
+      <description>Number of CPU threads whisper-server will use during computation</description>
+    </key>
+    <key name="show-notification" type="b">
+      <default>true</default>
+      <summary>Show notification</summary>
+      <description>Whether to show a notification when speech is copied to clipboard</description>
+    </key>
   </schema>
 </schemalist>
