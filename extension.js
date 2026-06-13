@@ -63,6 +63,7 @@ class Indicator {
             } else if (this.state === 'processing') {
                 this.cancelAndHide();
             }
+            return true;
         });
 
         Main.panel.addToStatusArea(this.ext.uuid, this.ext._indicator);
@@ -98,7 +99,7 @@ class Indicator {
         
         try {
             Gst.init(null);
-            let pipelineStr = `autoaudiosrc ! audioconvert ! wavenc ! filesink location=${filePath}`;
+            let pipelineStr = `autoaudiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=16000,channels=1 ! wavenc ! filesink location=${filePath}`;
             this.pipeline = Gst.parse_launch(pipelineStr);
             this.pipeline.set_state(Gst.State.PLAYING);
         } catch (e) {
@@ -264,7 +265,8 @@ export default class ExampleExtension extends Extension {
                 '-m', modelPath,
                 '--port', port.toString(),
                 '--host', '127.0.0.1',
-                '-t', threads.toString()
+                '-t', threads.toString(),
+                '--convert'
             ];
             if (language && language !== 'auto') {
                 argv.push('-l', language);

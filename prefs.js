@@ -19,8 +19,7 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         page.add(generalGroup);
         
         const shortcutRow = new Adw.EntryRow({
-            title: 'Горячая клавиша',
-            subtitle: 'Например: F9, <Super>R, <Ctrl><Alt>R',
+            title: 'Горячая клавиша (например: F9, <Super>R, <Ctrl><Alt>R)',
             text: settings.get_strv('shortcut-key')[0] || ''
         });
         shortcutRow.connect('changed', (entry) => {
@@ -29,8 +28,7 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         generalGroup.add(shortcutRow);
 
         const pathRow = new Adw.EntryRow({
-            title: 'Имя файла записи (WAV)',
-            subtitle: 'Относительно домашней папки или абсолютный путь',
+            title: 'Имя файла записи (относительно домашней папки или абсолютный путь)',
             text: settings.get_string('save-path')
         });
         pathRow.connect('changed', (entry) => {
@@ -76,8 +74,7 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         whisperGroup.add(modelRow);
 
         const langRow = new Adw.EntryRow({
-            title: 'Язык распознавания',
-            subtitle: 'Код языка (например, ru, en) или auto для автоопределения',
+            title: 'Язык распознавания (например, ru, en, или auto для автоопределения)',
             text: settings.get_string('whisper-language')
         });
         langRow.connect('changed', (entry) => {
