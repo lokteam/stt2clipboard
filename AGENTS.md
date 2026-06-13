@@ -23,3 +23,18 @@ This document outlines the architecture, critical technical choices, and constra
 - **GStreamer audioresample**: The GStreamer pipeline is explicitly restricted to `rate=16000,channels=1`. Whisper models strictly require 16000Hz mono PCM audio. Recording at 44100Hz stereo caused `whisper-server` to reject files with an `Invalid request` error.
 - **Subprocess curl**: Instead of constructing raw multipart HTTP streams manually in GJS (which lacks high-level FormData/Blob APIs), the extension executes `curl` via `Gio.Subprocess` with a `Gio.Cancellable`. This is robust, secure, and allows the user to cancel ongoing transcription requests in real-time.
 - **St.Clipboard**: Wayland enforces strict window-focus restrictions on background clipboard writes. To bypass this, the extension uses `St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text)`, which is native to GNOME Shell and works perfectly in background/Wayland contexts.
+
+## Constraints
+
+* Do not add comments or docstrings unless absolutely necessary (for complex math/algorithms). The code itself must remain self-documenting.
+* Never use `as any`, `@ts-ignore`, or `@ts-expect-error` inside TypeScript/JavaScript code.
+* Always clean up GStreamer pipelines, timeout sources, and background subprocesses on extension disable or cancellation to prevent leaks.
+
+## Upcoming Roadmap (Next Session)
+
+* **English Only**: All UI and notifications are transitioning to 100% English.
+* **Hotkey Grabber**: Replacing text keybindings in preferences with an active Gtk hotkey listener button.
+* **Whisper Checker**: Adding system-wide path checks and an automated/copypasteable distro installer banner (Arch, Ubuntu, Fedora).
+* **Model Downloader**: Integrating an asynchronous `curl`-based downloader with a Gtk.ProgressBar to fetch models directly from Hugging Face into `~/.local/share/stt2clipboard/models/`.
+* **Language Search**: A searchable dropdown listing all Whisper languages with full Russian names instead of code entry.
+* **Temp & History**: Moving default recordings to `/tmp/stt_temp_record.wav`, with an option to chronologically archive WAV and TXT files to a user-selected history folder.
