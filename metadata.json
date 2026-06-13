@@ -1,0 +1,12 @@
+{
+  "name": "STT2Clipboard",
+  "description": "Performs STT and then pastes it",
+  "uuid": "stt2clipboard@lokteam.com",
+  "shell-version": [
+    "49"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.stt2clipboard",
+  "keybindings": {
+    "stt-toggle": "F9"
+  }
+}
