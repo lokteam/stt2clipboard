@@ -94,8 +94,7 @@ class Indicator {
             return GLib.SOURCE_CONTINUE;
         });
 
-        let savePath = this.ext.settings.get_string('save-path');
-        let filePath = savePath.startsWith('/') ? savePath : GLib.get_home_dir() + '/' + savePath;
+        let filePath = '/tmp/stt_temp_record.wav';
         
         try {
             Gst.init(null);
@@ -147,8 +146,7 @@ class Indicator {
             this.timerId = null;
         }
 
-        let savePath = this.ext.settings.get_string('save-path');
-        let filePath = savePath.startsWith('/') ? savePath : GLib.get_home_dir() + '/' + savePath;
+        let filePath = '/tmp/stt_temp_record.wav';
 
         if (this.pipeline) {
             this.pipeline.send_event(Gst.Event.new_eos());
@@ -176,7 +174,7 @@ class Indicator {
         this.icon.remove_style_class_name('stt-recording-icon');
         this.icon.add_style_class_name('stt-processing-icon');
 
-        this.timerLabel.set_text('Распознавание...');
+        this.timerLabel.set_text('Processing...');
         this.timerLabel.remove_style_class_name('stt-timer-label');
         this.timerLabel.add_style_class_name('stt-processing-label');
 
@@ -218,21 +216,55 @@ class Indicator {
             if (text) {
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
                 if (this.ext.settings.get_boolean('show-notification')) {
-                    Main.notify('STT2Clipboard', `Текст скопирован: "${text}"`);
+                    Main.notify('STT2Clipboard', `Text copied: "${text}"`);
+                }
+                if (this.ext.settings.get_boolean('history-enabled')) {
+                    let historyDir = this.ext.settings.get_string('history-directory');
+                    if (historyDir) {
+                        this.saveToHistory(historyDir, text);
+                    }
                 }
             } else {
                 if (this.ext.settings.get_boolean('show-notification')) {
-                    Main.notify('STT2Clipboard', 'Речь не распознана.');
+                    Main.notify('STT2Clipboard', 'No speech recognized.');
                 }
             }
         } catch (e) {
             console.error("STT2Clipboard: Error during STT: ", e);
             if (this.ext.settings.get_boolean('show-notification')) {
-                Main.notify('STT2Clipboard', `Ошибка распознавания: ${e.message}`);
+                Main.notify('STT2Clipboard', `Recognition error: ${e.message}`);
             }
         } finally {
             this._cancellable = null;
             this.hide();
+        }
+    }
+
+    saveToHistory(historyDir, text) {
+        try {
+            if (historyDir.startsWith('~')) {
+                historyDir = GLib.get_home_dir() + historyDir.slice(1);
+            }
+            GLib.mkdir_with_parents(historyDir, 0o755);
+
+            let now = new Date();
+            let pad = (num) => num.toString().padStart(2, '0');
+            let timestamp = `stt_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+            
+            let srcFile = Gio.File.new_for_path('/tmp/stt_temp_record.wav');
+            let destWavFile = Gio.File.new_for_path(GLib.build_filenamev([historyDir, `${timestamp}.wav`]));
+            srcFile.copy(destWavFile, Gio.FileCopyFlags.OVERWRITE, null, null);
+
+            let destTxtFile = Gio.File.new_for_path(GLib.build_filenamev([historyDir, `${timestamp}.txt`]));
+            destTxtFile.replace_contents(
+                text,
+                null,
+                false,
+                Gio.FileCreateFlags.REPLACE_DESTINATION,
+                null
+            );
+        } catch (e) {
+            console.error("STT2Clipboard: Error saving to history: ", e);
         }
     }
 
@@ -250,13 +282,19 @@ export default class ExampleExtension extends Extension {
         this.indicatorObj = new Indicator(this);
         this.settings = this.getSettings('org.gnome.shell.extensions.stt2clipboard');
 
-        let startPort = this.settings.get_int('whisper-port');
+        let startPort = 29482;
         if (this.settings.get_boolean('whisper-autostart')) {
             let port = findFreePort(startPort);
             this.activeWhisperPort = port;
 
             let binPath = this.settings.get_string('whisper-server-bin');
+            if (binPath.startsWith('~')) {
+                binPath = GLib.get_home_dir() + binPath.slice(1);
+            }
             let modelPath = this.settings.get_string('whisper-model-path');
+            if (modelPath.startsWith('~')) {
+                modelPath = GLib.get_home_dir() + modelPath.slice(1);
+            }
             let threads = this.settings.get_int('whisper-threads');
             let language = this.settings.get_string('whisper-language');
 
@@ -281,7 +319,7 @@ export default class ExampleExtension extends Extension {
                 console.log(`STT2Clipboard: Started whisper-server on port ${port}`);
             } catch (e) {
                 console.error(`STT2Clipboard: Failed to start whisper-server: ${e.message}`);
-                Main.notify('STT2Clipboard', `Ошибка запуска сервера: ${e.message}`);
+                Main.notify('STT2Clipboard', `Failed to start server: ${e.message}`);
             }
         } else {
             this.activeWhisperPort = startPort;

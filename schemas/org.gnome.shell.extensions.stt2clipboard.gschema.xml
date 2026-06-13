@@ -17,14 +17,24 @@
       <description>Path to the whisper-server binary</description>
     </key>
     <key name="whisper-model-path" type="s">
-      <default>'/usr/share/whisper-models/ggml-large-v3-turbo-q5_0.bin'</default>
+      <default>'~/.local/share/stt2clipboard/models/ggml-base.bin'</default>
       <summary>Whisper model path</summary>
       <description>Path to the GGML model for whisper-server</description>
     </key>
     <key name="whisper-port" type="i">
-      <default>9123</default>
+      <default>29482</default>
       <summary>Whisper server port</summary>
       <description>Port number for the whisper-server</description>
+    </key>
+    <key name="history-enabled" type="b">
+      <default>false</default>
+      <summary>Enable history logging</summary>
+      <description>Whether to keep historical record of recordings and transcripts</description>
+    </key>
+    <key name="history-directory" type="s">
+      <default>''</default>
+      <summary>History log directory</summary>
+      <description>Folder where WAV audio and TXT transcripts will be chronologically saved</description>
     </key>
     <key name="whisper-language" type="s">
       <default>'ru'</default>
