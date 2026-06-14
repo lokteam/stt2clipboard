@@ -53,8 +53,8 @@ class Indicator {
             style_class: 'system-status-icon',
         });
 
-        this.box.add_child(this.timerLabel);
         this.box.add_child(this.icon);
+        this.box.add_child(this.timerLabel);
         this.ext._indicator.add_child(this.box);
 
         if (this.ext._indicator._clickGesture) {
@@ -200,9 +200,7 @@ class Indicator {
         this.icon.remove_style_class_name('stt-recording-icon');
         this.icon.add_style_class_name('stt-processing-icon');
 
-        this.timerLabel.set_text('Processing...');
-        this.timerLabel.remove_style_class_name('stt-timer-label');
-        this.timerLabel.add_style_class_name('stt-processing-label');
+        this.timerLabel.visible = false;
 
         this._cancellable = new Gio.Cancellable();
 
