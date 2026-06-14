@@ -1,9 +1,14 @@
 .stt-recording-icon {
-    color: #f66151;
+    color: #ff7800;
 }
 .stt-timer-label {
+    color: #ffffff;
     font-variant-numeric: tabular-nums;
 }
 .stt-processing-icon {
     color: #62a0ea;
+}
+.stt-indicator-button {
+    min-width: 80px;
+    max-width: 80px;
 }

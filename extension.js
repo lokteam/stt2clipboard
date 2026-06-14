@@ -40,8 +40,13 @@ class Indicator {
         this.visible = true;
         this.state = 'recording';
         this.ext._indicator = new PanelMenu.Button(0.0, this.ext.metadata.name, true);
+        this.ext._indicator.add_style_class_name('stt-indicator-button');
 
-        this.box = new St.BoxLayout({ style_class: 'panel-status-indicators-box' });
+        this.box = new St.BoxLayout({
+            style_class: 'panel-status-indicators-box',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER
+        });
 
         this.timerLabel = new St.Label({
             text: '00:00',
@@ -53,8 +58,8 @@ class Indicator {
             style_class: 'system-status-icon',
         });
 
-        this.box.add_child(this.icon);
         this.box.add_child(this.timerLabel);
+        this.box.add_child(this.icon);
         this.ext._indicator.add_child(this.box);
 
         if (this.ext._indicator._clickGesture) {
