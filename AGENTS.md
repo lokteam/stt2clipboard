@@ -30,6 +30,12 @@ This document outlines the architecture, critical technical choices, and constra
 * Never use `as any`, `@ts-ignore`, or `@ts-expect-error` inside TypeScript/JavaScript code.
 * Always clean up GStreamer pipelines, timeout sources, and background subprocesses on extension disable or cancellation to prevent leaks.
 
+## Git and Commit Guidelines
+
+* After implementing each feature or atomic change, the agent must create a git commit.
+* The commit message must be clear, concise, and written in Russian (на русском языке), describing exactly what was changed (e.g., "Добавлена валидация путей к Whisper", "Реализован асинхронный загрузчик моделей").
+* Making frequent, atomic commits with clear Russian messages makes rolling back and troubleshooting individual changes much easier.
+
 ## Upcoming Roadmap (Next Session)
 
 * **English Only**: All UI and notifications are transitioning to 100% English.
