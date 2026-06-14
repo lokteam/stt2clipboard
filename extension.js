@@ -56,6 +56,7 @@ class Indicator {
         this.icon = new St.Icon({
             icon_name: 'audio-input-microphone-symbolic',
             style_class: 'system-status-icon',
+            y_align: Clutter.ActorAlign.CENTER
         });
 
         this.box.add_child(this.timerLabel);

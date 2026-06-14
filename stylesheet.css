@@ -4,6 +4,7 @@
 .stt-timer-label {
     color: #ffffff;
     font-variant-numeric: tabular-nums;
+    margin-top: 2px;
 }
 .stt-processing-icon {
     color: #62a0ea;
