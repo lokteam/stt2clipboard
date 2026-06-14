@@ -217,19 +217,6 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         settings.bind('show-notification', notificationRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         generalGroup.add(notificationRow);
 
-        // Threads row (Feature 1 translated)
-        const threadsRow = new Adw.SpinRow({
-            title: 'CPU Threads',
-            subtitle: 'Number of CPU threads to allocate for model inference',
-            adjustment: new Gtk.Adjustment({
-                lower: 1,
-                upper: 64,
-                step_increment: 1
-            })
-        });
-        settings.bind('whisper-threads', threadsRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-        generalGroup.add(threadsRow);
-
 
         // --- GROUP 2: History Settings (Feature 7) ---
         const historyGroup = new Adw.PreferencesGroup({
@@ -411,6 +398,19 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
                 settings.set_string('whisper-server-bin', hasServer);
             }
         }
+
+        let maxThreads = Math.max(1, GLib.get_num_processors());
+        const threadsRow = new Adw.SpinRow({
+            title: 'CPU Threads',
+            subtitle: 'Number of CPU threads to allocate for model inference',
+            adjustment: new Gtk.Adjustment({
+                lower: 1,
+                upper: maxThreads,
+                step_increment: 1
+            })
+        });
+        settings.bind('whisper-threads', threadsRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+        whisperGroup.add(threadsRow);
 
         // Feature 4: Model Download Manager & Selection List
         let modelListNames = MODELS.map(m => `${m.name} (${m.size})`);
