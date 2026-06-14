@@ -71,9 +71,30 @@ class Indicator {
         });
         this.ext._indicator.add_action(this._clickGesture);
 
+        this.ext._indicator.connect('key-press-event', (actor, event) => {
+            let symbol = event.get_key_symbol();
+            if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
+                if (this.state === 'recording') {
+                    this.stopAndProcess();
+                } else if (this.state === 'processing') {
+                    this.cancelAndHide();
+                }
+                return true;
+            }
+            return false;
+        });
+
         Main.panel.addToStatusArea(this.ext.uuid, this.ext._indicator);
 
         this.startRecording();
+
+        this.ext._indicator.can_focus = true;
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            if (this.ext._indicator) {
+                global.stage.set_key_focus(this.ext._indicator);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     hide() {
