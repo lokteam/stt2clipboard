@@ -656,32 +656,81 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         }
         updateModelStatus();
 
-        // Feature 5: Searchable English Language Dropdown
-        let langNames = LANGUAGES.map(l => l.name);
-        let langStringList = Gtk.StringList.new(langNames);
-
-        const langRow = new Adw.ComboRow({
+        const langGroup = new Adw.PreferencesGroup({
             title: 'Recognition Language',
-            subtitle: 'Language spoken in the recording',
-            model: langStringList,
-            enable_search: true,
-            expression: Gtk.PropertyExpression.new(Gtk.StringObject, null, 'string')
+            description: 'Select the language spoken in the recording'
         });
-        whisperGroup.add(langRow);
+        page.add(langGroup);
 
-        let currentLangCode = settings.get_string('whisper-language');
-        let langIndex = LANGUAGES.findIndex(l => l.code === currentLangCode);
-        if (langIndex !== -1) {
-            langRow.set_selected(langIndex);
-        } else {
-            langRow.set_selected(0);
+        const searchRow = new Adw.EntryRow({
+            title: 'Search Language',
+        });
+        searchRow.add_prefix(new Gtk.Image({
+            icon_name: 'system-search-symbolic'
+        }));
+        langGroup.add(searchRow);
+
+        let firstCheckBtn = null;
+        let langRows = [];
+
+        for (let lang of LANGUAGES) {
+            let checkBtn = new Gtk.CheckButton({
+                valign: Gtk.Align.CENTER
+            });
+            if (firstCheckBtn === null) {
+                firstCheckBtn = checkBtn;
+            } else {
+                checkBtn.set_group(firstCheckBtn);
+            }
+
+            let row = new Adw.ActionRow({
+                title: lang.name,
+                subtitle: lang.code === 'auto' ? 'Automatic language detection' : `Language code: ${lang.code}`,
+                activatable: true
+            });
+            row.add_prefix(checkBtn);
+            langGroup.add(row);
+
+            langRows.push({
+                lang: lang,
+                row: row,
+                checkBtn: checkBtn
+            });
+
+            row.connect('activated', () => {
+                checkBtn.set_active(true);
+            });
+
+            checkBtn.connect('toggled', () => {
+                if (checkBtn.get_active()) {
+                    settings.set_string('whisper-language', lang.code);
+                }
+            });
         }
 
-        langRow.connect('notify::selected', () => {
-            let index = langRow.get_selected();
-            let selectedLang = LANGUAGES[index];
-            if (selectedLang) {
-                settings.set_string('whisper-language', selectedLang.code);
+        let currentLangCode = settings.get_string('whisper-language');
+        let hasActive = false;
+        for (let item of langRows) {
+            if (item.lang.code === currentLangCode) {
+                item.checkBtn.set_active(true);
+                hasActive = true;
+                break;
+            }
+        }
+        if (!hasActive && langRows.length > 0) {
+            langRows[0].checkBtn.set_active(true);
+        }
+
+        searchRow.connect('changed', (entry) => {
+            let filterText = entry.get_text().toLowerCase().trim();
+            for (let item of langRows) {
+                if (!filterText) {
+                    item.row.set_visible(true);
+                } else {
+                    let nameMatch = item.lang.name.toLowerCase().includes(filterText);
+                    let codeMatch = item.lang.code.toLowerCase().includes(filterText);
+                    item.row.set_visible(nameMatch || codeMatch);
+                }
             }
         });
     }
