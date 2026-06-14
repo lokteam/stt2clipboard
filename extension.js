@@ -39,7 +39,7 @@ class Indicator {
     show() {
         this.visible = true;
         this.state = 'recording';
-        this.ext._indicator = new PanelMenu.Button(0.0, this.ext.metadata.name, false);
+        this.ext._indicator = new PanelMenu.Button(0.0, this.ext.metadata.name, true);
 
         this.box = new St.BoxLayout({ style_class: 'panel-status-indicators-box' });
 
@@ -57,14 +57,19 @@ class Indicator {
         this.box.add_child(this.icon);
         this.ext._indicator.add_child(this.box);
 
-        this.ext._indicator.connect('button-press-event', () => {
+        if (this.ext._indicator._clickGesture) {
+            this.ext._indicator.remove_action(this.ext._indicator._clickGesture);
+        }
+
+        this._clickGesture = new Clutter.ClickGesture();
+        this._clickGesture.connect('recognize', () => {
             if (this.state === 'recording') {
                 this.stopAndProcess();
             } else if (this.state === 'processing') {
                 this.cancelAndHide();
             }
-            return true;
         });
+        this.ext._indicator.add_action(this._clickGesture);
 
         Main.panel.addToStatusArea(this.ext.uuid, this.ext._indicator);
 
