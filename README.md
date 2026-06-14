@@ -4,35 +4,33 @@ GNOME Shell extension that performs Speech-to-Text (STT) and automatically copie
 
 ## Features
 
-* **Single-key trigger**: Press F9 (customizable) to start recording, and press it again to stop, transcribe, and copy.
-* **Panel Indicator**: Shows a recording microphone with a real-time duration timer. On stop, it transitions to a processing state (spinner) while waiting for the Whisper server response.
-* **Wayland Compatible**: Uses the native St.Clipboard API which works seamlessly under Wayland.
-* **Integrated Background Process**: Manages the lifecycle of a local whisper-server. It starts the server when the extension is enabled and terminates it when the extension is disabled.
-* **Automatic Port Probing**: Dynamically scans for a free TCP port starting from the configured port to avoid conflicts.
+* **Interactive Hotkey Trigger**: Press **F9** (customizable via an interactive Gtk Hotkey Grabber in preferences) to start recording, and press it again to stop, transcribe, and copy.
+* **Focused Keyboard Controls**: Upon recording, the indicator grabs system key focus. You can complete recording or cancel processing instantly with the `Enter`/`Return` or `Escape` keys.
+* **Stable Panel Indicator**: Styled using native classes (`stt-indicator-button`) with a stabilized width (80px) and vertical alignments to prevent panel layout shifts.
+  * **Recording**: Displays an orange microphone icon with a real-time MM:SS timer.
+  * **Processing**: Hides the timer and displays a rotating blue spinner while asynchronously executing the transcription request.
+* **GStreamer Optimized Audio**: Records directly using GStreamer restricted to `16000Hz` mono PCM audio (`autoaudiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=16000,channels=1 ! wavenc ! filesink`), satisfying Whisper's exact input requirements.
+* **No Home Clutter**: Stores temporary recording files safely in `/tmp/stt_temp_record.wav`.
+* **Integrated Background Process**: Spawns and manages the lifecycle of a local `whisper-server` process with `--convert` flags. Automatically shuts down the process when the extension is disabled.
+* **Automatic Port Probing**: Scans local TCP ports starting from `29482` to run the server on a free port without conflicts.
+* **Wayland Compatible**: Leverages GNOME's native `St.Clipboard` API to bypass Wayland's strict background window-focus clipboard restrictions.
+* **English Localization**: Clean English user interface for all preferences and system desktop notifications.
 
 ## Requirements
 
-* **GNOME Shell**: 45+ (compatible with GNOME 49)
-* **whisper-server**: Binary from whisper.cpp (typically at `/usr/bin/whisper-server`)
-* **Whisper GGML Model**: A downloaded model file (e.g., in `/usr/share/whisper-models/`)
-* **System Utilities**: `curl` and `ffmpeg` must be installed on your system.
+* **GNOME Shell**: 46 to 50
+* **whisper-server**: Binary from `whisper.cpp` (typically auto-detected in user PATH or custom path).
+* **Whisper GGML Model**: A `.bin` model file.
+* **System Utilities**: `curl`, `ffmpeg`, and `gnome-terminal` (used for running the auto-installer).
 
-## GStreamer Audio Pipeline
+## Configuration & Preferences
 
-The extension records audio using the GStreamer framework with the following high-efficiency pipeline optimized for Whisper:
-`autoaudiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=16000,channels=1 ! wavenc ! filesink`
+Open the extension preferences to configure and use these rich features:
 
-This ensures that the captured WAV file is exactly 16000Hz mono, reducing the size of the uploaded audio by approximately 6x and minimizing inference latency.
-
-## Configuration
-
-Open the extension preferences to configure:
-* **Hotkey**: Set custom keybindings (e.g., F9, `<Super>R`, etc.).
-* **Save Path**: The path to save the temporary recording file (relative to your home directory or absolute).
-* **Autostart Server**: Turn automatic management of the whisper-server on or off.
-* **Binary Path**: Path to your `whisper-server` executable.
-* **Model Path**: Path to your `.bin` GGML model file.
-* **Language**: Recognition language code (e.g., `ru`, `en`) or `auto` for auto-detection.
-* **Port**: Starting port for the whisper-server.
-* **CPU Threads**: Number of threads to allocate for model inference.
-* **Show Notifications**: Toggle desktop notifications upon successful transcription.
+1. **Hotkey Grabber**: Click to capture actual keys and modifiers (e.g., `<Super>R`, `<Ctrl><Alt>S`) directly or reset back to `F9`.
+2. **System-wide Whisper Checker & Distro Installer**: Automatically detects if `whisper-server` is in your PATH. If missing, displays an elegant banner with pre-configured command instructions for Arch Linux, Ubuntu/Debian, and Fedora, which can be copied or executed directly in a newly spawned terminal.
+3. **Model Download Manager**: Choose from standard models (Tiny, Base, Small, Medium, Large-v3-Turbo) or supply a custom path. If a standard model is missing, click **Download** to fetch it asynchronously via `curl` directly into `~/.local/share/stt2clipboard/models/` with real-time percentage progress bar feedback.
+4. **Searchable Language Dropdown**: Multi-language selection using a searchable dropdown (with `enable_search` enabled) to select recognition languages by their full names instead of codes.
+5. **CPU Threads Bounding**: Allocates the number of CPU threads to use for inference, bounded up to your hardware's actual logical core count.
+6. **Recording History**: Option to chronologically archive WAV recordings and TXT transcripts to a folder of your choice (saved as `stt_YYYY-MM-DD_HH-MM-SS.wav` and `.txt`).
+7. **Desktop Notifications**: Toggle toast notifications upon successful copy.
