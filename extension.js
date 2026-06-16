@@ -10,6 +10,22 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
+const DEBUG = false;
+
+function _log(msg) {
+    if (DEBUG) {
+        console.log(msg);
+    }
+}
+
+function _logError(msg, err) {
+    if (err) {
+        console.error(`${msg}: ${err.message || err}`);
+    } else {
+        console.error(msg);
+    }
+}
+
 function findFreePort(startPort) {
     let port = startPort;
     while (port < 65535) {
@@ -134,7 +150,7 @@ class Indicator {
             this.pipeline = Gst.parse_launch(pipelineStr);
             this.pipeline.set_state(Gst.State.PLAYING);
         } catch (e) {
-            console.error("STT2Clipboard: Error starting GStreamer: ", e);
+            _logError("STT2Clipboard: Error starting GStreamer", e);
         }
     }
 
@@ -161,7 +177,7 @@ class Indicator {
                     try {
                         pipelineToClose.set_state(Gst.State.NULL);
                     } catch (e) {
-                        console.error("STT2Clipboard: Error setting pipeline state to NULL: ", e);
+                        _logError("STT2Clipboard: Error setting pipeline state to NULL", e);
                     }
                 }
                 return GLib.SOURCE_REMOVE;
@@ -191,7 +207,7 @@ class Indicator {
                         try {
                             pipelineToClose.set_state(Gst.State.NULL);
                         } catch (e) {
-                            console.error("STT2Clipboard: Error setting pipeline state to NULL: ", e);
+                            _logError("STT2Clipboard: Error setting pipeline state to NULL", e);
                         }
                     }
                     resolve();
@@ -274,7 +290,7 @@ class Indicator {
                 }
             }
         } catch (e) {
-            console.error("STT2Clipboard: Error during STT: ", e);
+            _logError("STT2Clipboard: Error during STT", e);
             if (this.ext.settings.get_boolean('show-notification')) {
                 Main.notify('STT2Clipboard', `Recognition error: ${e.message}`);
             }
@@ -308,7 +324,7 @@ class Indicator {
                 null
             );
         } catch (e) {
-            console.error("STT2Clipboard: Error saving to history: ", e);
+            _logError("STT2Clipboard: Error saving to history", e);
         }
     }
 
@@ -360,9 +376,9 @@ export default class ExampleExtension extends Extension {
                     flags: Gio.SubprocessFlags.NONE
                 });
                 this._whisperProc.init(null);
-                console.log(`STT2Clipboard: Started whisper-server on port ${port}`);
+                _log(`STT2Clipboard: Started whisper-server on port ${port}`);
             } catch (e) {
-                console.error(`STT2Clipboard: Failed to start whisper-server: ${e.message}`);
+                _logError(`STT2Clipboard: Failed to start whisper-server: ${e.message}`);
                 Main.notify('STT2Clipboard', `Failed to start server: ${e.message}`);
             }
         } else {
@@ -399,7 +415,7 @@ export default class ExampleExtension extends Extension {
             try {
                 this._whisperProc.force_exit();
             } catch (e) {
-                console.error(`STT2Clipboard: Error stopping whisper-server: ${e.message}`);
+                _logError(`STT2Clipboard: Error stopping whisper-server: ${e.message}`);
             }
             this._whisperProc = null;
         }
