@@ -26,22 +26,6 @@ function _logError(msg, err) {
     }
 }
 
-function findFreePort(startPort) {
-    let port = startPort;
-    while (port < 65535) {
-        try {
-            let listener = new Gio.SocketListener();
-            let address = Gio.InetSocketAddress.new_from_string('127.0.0.1', port);
-            listener.add_address(address, Gio.SocketType.STREAM, Gio.SocketProtocol.TCP, null, null);
-            listener.close();
-            return port;
-        } catch (e) {
-            port++;
-        }
-    }
-    return startPort;
-}
-
 class Indicator {
     constructor(ext) {
         this.ext = ext;
@@ -79,10 +63,6 @@ class Indicator {
         this.box.add_child(this.icon);
         this.ext._indicator.add_child(this.box);
 
-        if (this.ext._indicator._clickGesture) {
-            this.ext._indicator.remove_action(this.ext._indicator._clickGesture);
-        }
-
         this._clickGesture = new Clutter.ClickGesture();
         this._clickGesture.connect('recognize', () => {
             if (this.state === 'recording') {
@@ -111,12 +91,6 @@ class Indicator {
         this.startRecording();
 
         this.ext._indicator.can_focus = true;
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-            if (this.ext._indicator) {
-                global.stage.set_key_focus(this.ext._indicator);
-            }
-            return GLib.SOURCE_REMOVE;
-        });
     }
 
     hide() {
@@ -145,7 +119,6 @@ class Indicator {
         let filePath = '/tmp/stt_temp_record.wav';
         
         try {
-            Gst.init(null);
             let pipelineStr = `autoaudiosrc ! audioconvert ! audioresample ! audio/x-raw,rate=16000,channels=1 ! wavenc ! filesink location=${filePath}`;
             this.pipeline = Gst.parse_launch(pipelineStr);
             this.pipeline.set_state(Gst.State.PLAYING);
@@ -170,18 +143,12 @@ class Indicator {
 
         if (this.pipeline) {
             this.pipeline.send_event(Gst.Event.new_eos());
-            let pipelineToClose = this.pipeline;
+            try {
+                this.pipeline.set_state(Gst.State.NULL);
+            } catch (e) {
+                _logError("STT2Clipboard: Error setting pipeline state to NULL", e);
+            }
             this.pipeline = null;
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-                if (pipelineToClose) {
-                    try {
-                        pipelineToClose.set_state(Gst.State.NULL);
-                    } catch (e) {
-                        _logError("STT2Clipboard: Error setting pipeline state to NULL", e);
-                    }
-                }
-                return GLib.SOURCE_REMOVE;
-            });
         }
     }
 
@@ -198,22 +165,12 @@ class Indicator {
 
         if (this.pipeline) {
             this.pipeline.send_event(Gst.Event.new_eos());
-            let pipelineToClose = this.pipeline;
+            try {
+                this.pipeline.set_state(Gst.State.NULL);
+            } catch (e) {
+                _logError("STT2Clipboard: Error setting pipeline state to NULL", e);
+            }
             this.pipeline = null;
-            
-            await new Promise(resolve => {
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-                    if (pipelineToClose) {
-                        try {
-                            pipelineToClose.set_state(Gst.State.NULL);
-                        } catch (e) {
-                            _logError("STT2Clipboard: Error setting pipeline state to NULL", e);
-                        }
-                    }
-                    resolve();
-                    return GLib.SOURCE_REMOVE;
-                });
-            });
         }
 
         if (this.state !== 'processing') return;
@@ -260,19 +217,7 @@ class Indicator {
             let text = response.text ? response.text.trim() : '';
 
             if (text) {
-                // Умная очистка переносов строк от whisper-server
-                text = text.replace(/(.)\n(.)/gu, (match, before, after) => {
-                    if (/\p{L}/u.test(before) && /\p{L}/u.test(after)) {
-                        return before + after;
-                    }
-                    if (/[.!?]/.test(before)) {
-                        return before + '\n' + after;
-                    }
-                    if (before === ' ' || after === ' ') {
-                        return before + after;
-                    }
-                    return before + ' ' + after;
-                });
+                text = text.replace(/\s+/g, ' ').trim();
 
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
                 if (this.ext.settings.get_boolean('show-notification')) {
@@ -342,9 +287,8 @@ export default class ExampleExtension extends Extension {
         this.indicatorObj = new Indicator(this);
         this.settings = this.getSettings('org.gnome.shell.extensions.stt2clipboard');
 
-        let startPort = 29482;
         if (this.settings.get_boolean('whisper-autostart')) {
-            let port = findFreePort(startPort);
+            let port = this.settings.get_int('whisper-port');
             this.activeWhisperPort = port;
 
             let binPath = this.settings.get_string('whisper-server-bin');
@@ -382,7 +326,7 @@ export default class ExampleExtension extends Extension {
                 Main.notify('STT2Clipboard', `Failed to start server: ${e.message}`);
             }
         } else {
-            this.activeWhisperPort = startPort;
+            this.activeWhisperPort = this.settings.get_int('whisper-port');
             this._whisperProc = null;
         }
 
