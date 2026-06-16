@@ -6,11 +6,6 @@
       <summary>Toggle shortcut</summary>
       <description>Shortcut to start/stop speech to text</description>
     </key>
-    <key name="save-path" type="s">
-      <default>'stt_record.wav'</default>
-      <summary>Record save path</summary>
-      <description>Path where the record will be saved (relative to home or absolute)</description>
-    </key>
     <key name="whisper-server-bin" type="s">
       <default>'/usr/bin/whisper-server'</default>
       <summary>Whisper server binary path</summary>
