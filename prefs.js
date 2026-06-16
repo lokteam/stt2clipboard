@@ -247,126 +247,45 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
 
         selectFolderBtn.connect('clicked', () => {
             let parentWindow = selectFolderBtn.get_root();
-            try {
-                if (typeof Gtk.FileDialog !== 'undefined') {
-                    let dialog = new Gtk.FileDialog({
-                        title: 'Select History Folder'
-                    });
-                    dialog.select_folder(parentWindow, null, (dialogObj, res) => {
-                        try {
-                            let folder = dialogObj.select_folder_finish(res);
-                            if (folder) {
-                                let path = folder.get_path();
-                                settings.set_string('history-directory', path);
-                                historyDirRow.set_subtitle(path);
-                            }
-                        } catch (err) {
-                            console.error("STT2Clipboard: FileDialog failed: ", err);
-                        }
-                    });
-                    return;
-                }
-            } catch (e) {
-                // Fallback
-            }
-
-            let chooser = new Gtk.FileChooserNative({
-                title: 'Select History Folder',
-                transient_for: parentWindow,
-                action: Gtk.FileChooserAction.SELECT_FOLDER,
-                accept_label: 'Select',
-                cancel_label: 'Cancel'
+            let dialog = new Gtk.FileDialog({
+                title: 'Select History Folder'
             });
-            chooser.connect('response', (self, response_id) => {
-                if (response_id === Gtk.ResponseType.ACCEPT) {
-                    let folder = chooser.get_file();
+            dialog.select_folder(parentWindow, null, (dialogObj, res) => {
+                try {
+                    let folder = dialogObj.select_folder_finish(res);
                     if (folder) {
                         let path = folder.get_path();
                         settings.set_string('history-directory', path);
                         historyDirRow.set_subtitle(path);
                     }
+                } catch (err) {
+                    console.error("STT2Clipboard: FileDialog failed: ", err);
                 }
-                chooser.destroy();
             });
-            chooser.show();
         });
 
 
-        // --- GROUP 3: Whisper Installation Helper (Feature 3) ---
-        const installationGroup = new Adw.PreferencesGroup({
-            title: 'Whisper Server Installation Help',
-        });
-
+        // --- GROUP 3: Whisper Installation Helper ---
         let hasServer = GLib.find_program_in_path('whisper-server');
         if (!hasServer) {
+            const installationGroup = new Adw.PreferencesGroup({
+                title: 'Whisper Server Installation',
+            });
             page.add(installationGroup);
+
+            const installRow = new Adw.ActionRow({
+                title: 'Install whisper-server',
+                subtitle: 'whisper-server binary was not found in system PATH.'
+            });
+            installationGroup.add(installRow);
+
+            const linkBtn = new Gtk.LinkButton({
+                uri: 'https://github.com/ggerganov/whisper.cpp',
+                label: 'Instructions',
+                valign: Gtk.Align.CENTER
+            });
+            installRow.add_suffix(linkBtn);
         }
-
-        const banner = new Adw.Banner({
-            title: 'whisper-server binary was not found in system PATH. Install it below.',
-            use_markup: false
-        });
-        installationGroup.add(banner);
-
-        let distroList = Gtk.StringList.new(['Arch Linux', 'Ubuntu / Debian', 'Fedora']);
-        const distroCombo = new Adw.ComboRow({
-            title: 'Your Linux Distribution',
-            model: distroList,
-            selected: 0
-        });
-        installationGroup.add(distroCombo);
-
-        const commandRow = new Adw.ActionRow({
-            title: 'Install Command',
-            subtitle: 'paru -S lokstt || yay -S lokstt'
-        });
-        installationGroup.add(commandRow);
-
-        let runBtn = new Gtk.Button({
-            label: 'Install',
-            valign: Gtk.Align.CENTER,
-            css_classes: ['suggested-action']
-        });
-        commandRow.add_suffix(runBtn);
-
-        let copyBtn = new Gtk.Button({
-            icon_name: 'edit-copy-symbolic',
-            tooltip_text: 'Copy command',
-            valign: Gtk.Align.CENTER
-        });
-        commandRow.add_suffix(copyBtn);
-
-        const installCommands = [
-            'paru -S lokstt || yay -S lokstt',
-            'sudo apt update && sudo apt install -y cmake git build-essential ffmpeg && git clone https://github.com/ggerganov/whisper.cpp.git && cd whisper.cpp && make server && sudo cp server /usr/local/bin/whisper-server',
-            'sudo dnf groupinstall -y "Development Tools" && sudo dnf install -y cmake ffmpeg && git clone https://github.com/ggerganov/whisper.cpp.git && cd whisper.cpp && make server && sudo cp server /usr/local/bin/whisper-server'
-        ];
-
-        distroCombo.connect('notify::selected', () => {
-            let index = distroCombo.get_selected();
-            let cmd = installCommands[index] || '';
-            commandRow.set_subtitle(cmd);
-        });
-
-        copyBtn.connect('clicked', () => {
-            let index = distroCombo.get_selected();
-            let cmd = installCommands[index] || '';
-            copyBtn.get_clipboard().set_text(cmd);
-        });
-
-        runBtn.connect('clicked', () => {
-            let index = distroCombo.get_selected();
-            let cmd = installCommands[index] || '';
-            try {
-                let proc = new Gio.Subprocess({
-                    argv: ['gnome-terminal', '--', 'bash', '-c', `echo "Running installation command:"; echo "${cmd}"; echo ""; ${cmd}; echo ""; echo "Done! Press Enter to close."; read`],
-                    flags: Gio.SubprocessFlags.NONE
-                });
-                proc.init(null);
-            } catch (e) {
-                console.error("STT2Clipboard: Error running gnome-terminal: ", e);
-            }
-        });
 
 
         // --- GROUP 4: Whisper Server Settings ---
@@ -449,10 +368,6 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         downloadRow.add_suffix(downloadBtn);
 
         let modelsDir = GLib.get_user_data_dir() + '/stt2clipboard/models';
-        let downloadProcess = null;
-        let downloadCancellable = null;
-
-        let queue = [];
         let isDownloading = false;
         let currentDownloadingModel = null;
 
@@ -479,114 +394,14 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
                 settings.set_string('whisper-model-path', filepath);
             } else {
                 if (isDownloading && currentDownloadingModel && currentDownloadingModel.filename === model.filename) {
+                    downloadRow.set_subtitle(`Downloading ${model.name}...`);
                     downloadBtn.set_visible(false);
                     progressBar.set_visible(true);
-                } else if (queue.some(m => m.filename === model.filename)) {
-                    downloadRow.set_subtitle('Queued for automatic download...');
-                    downloadBtn.set_visible(false);
-                    progressBar.set_visible(false);
                 } else {
                     downloadRow.set_subtitle('Model is not downloaded.');
                     downloadBtn.set_visible(true);
                     progressBar.set_visible(false);
                 }
-            }
-        };
-
-        let processQueue = () => {
-            if (isDownloading || queue.length === 0) {
-                updateModelStatus();
-                return;
-            }
-
-            let model = queue.shift();
-            currentDownloadingModel = model;
-            isDownloading = true;
-
-            GLib.mkdir_with_parents(modelsDir, 0o755);
-            let filepath = modelsDir + '/' + model.filename;
-            let tempFilepath = filepath + '.tmp';
-
-            updateModelStatus();
-
-            let argv = [
-                'bash', '-c',
-                `curl -L --progress-bar -o '${tempFilepath}' '${model.url}' 2>&1 | tr '\\r' '\\n'`
-            ];
-
-            try {
-                downloadCancellable = new Gio.Cancellable();
-                downloadProcess = new Gio.Subprocess({
-                    argv: argv,
-                    flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
-                });
-                downloadProcess.init(downloadCancellable);
-
-                let stdoutStream = new Gio.DataInputStream({
-                    base_stream: downloadProcess.get_stdout_pipe()
-                });
-
-                let readOutput = () => {
-                    stdoutStream.read_line_async(GLib.PRIORITY_DEFAULT, downloadCancellable, (stream, res) => {
-                        try {
-                            let [line, len] = stream.read_line_finish_utf8(res);
-                            if (line !== null) {
-                                let match = line.match(/([0-9.]+)\s*%/);
-                                if (match) {
-                                    let percent = parseFloat(match[1]) / 100;
-                                    let selectedIndex = modelComboRow.get_selected();
-                                    if (selectedIndex < MODELS.length && MODELS[selectedIndex].filename === model.filename) {
-                                        progressBar.set_fraction(percent);
-                                        progressBar.set_visible(true);
-                                        downloadBtn.set_visible(false);
-                                        downloadRow.set_subtitle(`Downloading ${model.name}: ${match[1]}%`);
-                                    }
-                                }
-                                readOutput();
-                            } else {
-                                checkDownloadResult();
-                            }
-                        } catch (err) {
-                            if (!err.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
-                                console.error("STT2Clipboard: Error reading curl stream: ", err);
-                            }
-                            isDownloading = false;
-                            currentDownloadingModel = null;
-                            processQueue();
-                        }
-                    });
-                };
-
-                let checkDownloadResult = () => {
-                    let status = downloadProcess.get_exit_status();
-                    if (status === 0) {
-                        try {
-                            let src = Gio.File.new_for_path(tempFilepath);
-                            let dest = Gio.File.new_for_path(filepath);
-                            src.move(dest, Gio.FileCopyFlags.OVERWRITE, null, null);
-                            
-                            let selectedIndex = modelComboRow.get_selected();
-                            if (selectedIndex < MODELS.length && MODELS[selectedIndex].filename === model.filename) {
-                                settings.set_string('whisper-model-path', filepath);
-                            }
-                        } catch (moveErr) {
-                            console.error("STT2Clipboard: Failed to move temp file: ", moveErr);
-                        }
-                    }
-                    isDownloading = false;
-                    currentDownloadingModel = null;
-                    downloadProcess = null;
-                    downloadCancellable = null;
-                    processQueue();
-                };
-
-                readOutput();
-
-            } catch (spawnErr) {
-                console.error("STT2Clipboard: Failed to spawn download subprocess: ", spawnErr);
-                isDownloading = false;
-                currentDownloadingModel = null;
-                processQueue();
             }
         };
 
@@ -602,24 +417,57 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
 
         downloadBtn.connect('clicked', () => {
             let index = modelComboRow.get_selected();
-            if (index >= MODELS.length) return;
+            if (index >= MODELS.length || isDownloading) return;
 
             let model = MODELS[index];
-            if (!queue.some(m => m.filename === model.filename) && (!currentDownloadingModel || currentDownloadingModel.filename !== model.filename)) {
-                queue.push(model);
-                processQueue();
-            }
-        });
+            currentDownloadingModel = model;
+            isDownloading = true;
 
-        for (let m of MODELS) {
-            let filepath = modelsDir + '/' + m.filename;
-            if (!GLib.file_test(filepath, GLib.FileTest.EXISTS)) {
-                queue.push(m);
+            GLib.mkdir_with_parents(modelsDir, 0o755);
+            let filepath = modelsDir + '/' + model.filename;
+            let tempFilepath = filepath + '.tmp';
+
+            updateModelStatus();
+
+            let pulseId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                progressBar.pulse();
+                return GLib.SOURCE_CONTINUE;
+            });
+
+            try {
+                let proc = new Gio.Subprocess({
+                    argv: ['curl', '-L', '-o', tempFilepath, model.url],
+                    flags: Gio.SubprocessFlags.NONE
+                });
+                proc.init(null);
+                proc.wait_async(null, (obj, res) => {
+                    try {
+                        obj.wait_finish(res);
+                        if (obj.get_exit_status() === 0) {
+                            let src = Gio.File.new_for_path(tempFilepath);
+                            let dest = Gio.File.new_for_path(filepath);
+                            src.move(dest, Gio.FileCopyFlags.OVERWRITE, null, null);
+                            
+                            let selectedIndex = modelComboRow.get_selected();
+                            if (selectedIndex < MODELS.length && MODELS[selectedIndex].filename === model.filename) {
+                                settings.set_string('whisper-model-path', filepath);
+                            }
+                        }
+                    } catch (e) {
+                        console.error("STT2Clipboard: Download failed: ", e);
+                    }
+                    GLib.source_remove(pulseId);
+                    isDownloading = false;
+                    currentDownloadingModel = null;
+                    updateModelStatus();
+                });
+            } catch (e) {
+                console.error("STT2Clipboard: Failed to spawn curl: ", e);
+                GLib.source_remove(pulseId);
+                isDownloading = false;
+                currentDownloadingModel = null;
+                updateModelStatus();
             }
-        }
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-            processQueue();
-            return GLib.SOURCE_REMOVE;
         });
 
         // Initialize model row selection
@@ -662,75 +510,26 @@ export default class Stt2ClipboardPreferences extends ExtensionPreferences {
         });
         page.add(langGroup);
 
-        const searchRow = new Adw.EntryRow({
-            title: 'Search Language',
+        let langNames = LANGUAGES.map(l => l.name);
+        let langStringList = Gtk.StringList.new(langNames);
+
+        const langComboRow = new Adw.ComboRow({
+            title: 'Recognition Language',
+            model: langStringList,
+            enable_search: true
         });
-        searchRow.add_prefix(new Gtk.Image({
-            icon_name: 'system-search-symbolic'
-        }));
-        langGroup.add(searchRow);
-
-        let firstCheckBtn = null;
-        let langRows = [];
-
-        for (let lang of LANGUAGES) {
-            let checkBtn = new Gtk.CheckButton({
-                valign: Gtk.Align.CENTER
-            });
-            if (firstCheckBtn === null) {
-                firstCheckBtn = checkBtn;
-            } else {
-                checkBtn.set_group(firstCheckBtn);
-            }
-
-            let row = new Adw.ActionRow({
-                title: lang.name,
-                subtitle: lang.code === 'auto' ? 'Automatic language detection' : `Language code: ${lang.code}`,
-                activatable: true
-            });
-            row.add_prefix(checkBtn);
-            langGroup.add(row);
-
-            langRows.push({
-                lang: lang,
-                row: row,
-                checkBtn: checkBtn
-            });
-
-            row.connect('activated', () => {
-                checkBtn.set_active(true);
-            });
-
-            checkBtn.connect('toggled', () => {
-                if (checkBtn.get_active()) {
-                    settings.set_string('whisper-language', lang.code);
-                }
-            });
-        }
+        langGroup.add(langComboRow);
 
         let currentLangCode = settings.get_string('whisper-language');
-        let hasActive = false;
-        for (let item of langRows) {
-            if (item.lang.code === currentLangCode) {
-                item.checkBtn.set_active(true);
-                hasActive = true;
-                break;
-            }
-        }
-        if (!hasActive && langRows.length > 0) {
-            langRows[0].checkBtn.set_active(true);
+        let initialLangIndex = LANGUAGES.findIndex(l => l.code === currentLangCode);
+        if (initialLangIndex !== -1) {
+            langComboRow.set_selected(initialLangIndex);
         }
 
-        searchRow.connect('changed', (entry) => {
-            let filterText = entry.get_text().toLowerCase().trim();
-            for (let item of langRows) {
-                if (!filterText) {
-                    item.row.set_visible(true);
-                } else {
-                    let nameMatch = item.lang.name.toLowerCase().includes(filterText);
-                    let codeMatch = item.lang.code.toLowerCase().includes(filterText);
-                    item.row.set_visible(nameMatch || codeMatch);
-                }
+        langComboRow.connect('notify::selected', () => {
+            let index = langComboRow.get_selected();
+            if (index >= 0 && index < LANGUAGES.length) {
+                settings.set_string('whisper-language', LANGUAGES[index].code);
             }
         });
     }
