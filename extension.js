@@ -244,6 +244,20 @@ class Indicator {
             let text = response.text ? response.text.trim() : '';
 
             if (text) {
+                // Умная очистка переносов строк от whisper-server
+                text = text.replace(/(.)\n(.)/gu, (match, before, after) => {
+                    if (/\p{L}/u.test(before) && /\p{L}/u.test(after)) {
+                        return before + after;
+                    }
+                    if (/[.!?]/.test(before)) {
+                        return before + '\n' + after;
+                    }
+                    if (before === ' ' || after === ' ') {
+                        return before + after;
+                    }
+                    return before + ' ' + after;
+                });
+
                 St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
                 if (this.ext.settings.get_boolean('show-notification')) {
                     Main.notify('STT2Clipboard', `Text copied: "${text}"`);
